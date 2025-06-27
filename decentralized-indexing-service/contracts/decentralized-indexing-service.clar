@@ -483,3 +483,77 @@
     (ok (+ current-id u1))
   )
 )
+
+;; Execute a passed proposal
+(define-public (execute-proposal
+  (proposal-id uint)
+)
+  (let (
+    (proposal (unwrap! (map-get? Proposals { proposal-id: proposal-id }) ERR_INVALID_QUERY))
+  )
+    ;; Verify proposal voting period has ended
+    (asserts! (> stacks-block-height (get end-block proposal)) ERR_PROPOSAL_NOT_ACTIVE)
+    
+    ;; Verify proposal hasn't been executed
+    (asserts! (not (get executed proposal)) ERR_PROPOSAL_NOT_ACTIVE)
+    
+    ;; Verify proposal passed
+    (asserts! (and
+              (> (get votes-for proposal) (get votes-against proposal))
+              (>= (get votes-for proposal) MIN_VOTES_FOR_PROPOSAL))
+             ERR_INSUFFICIENT_REPUTATION)
+    
+    ;; Update network parameter
+    (map-set NetworkParameters
+      { param-key: (get parameter-key proposal) }
+      { value: (get proposed-value proposal) }
+    )
+    
+    ;; Mark proposal as executed
+    (map-set Proposals
+      { proposal-id: proposal-id }
+      (merge proposal { executed: true })
+    )
+    
+    (ok true)
+  )
+)
+
+;; Subscribe to a data feed
+(define-public (subscribe-to-feed
+  (feed-id (string-ascii 32))
+  (subscription-period uint)
+)
+  (let (
+    (subscriber tx-sender)
+    (feed (unwrap! (map-get? DataFeeds { feed-id: feed-id }) ERR_INVALID_DATA_FEED))
+    (total-fee (* (get access-fee feed) subscription-period))
+  )
+    ;; Verify feed hasn't expired
+    (asserts! (< stacks-block-height (get expiry-block feed)) ERR_INVALID_DATA_FEED)
+    
+    ;; Pay subscription fee to creator
+    (try! (stx-transfer? total-fee subscriber (get creator feed)))
+    
+    ;; Record subscription
+    (map-set FeedSubscriptions
+      {
+        subscriber: subscriber,
+        feed-id: feed-id
+      }
+      {
+        start-block: stacks-block-height,
+        subscription-period: subscription-period,
+        total-paid: total-fee
+      }
+    )
+    
+    ;; Update feed subscriber count
+    (map-set DataFeeds
+      { feed-id: feed-id }
+      (merge feed { subscribers: (+ (get subscribers feed) u1) })
+    )
+    
+    (ok true)
+  )
+)
