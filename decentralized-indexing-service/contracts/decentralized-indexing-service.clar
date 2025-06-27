@@ -271,3 +271,39 @@
     accepting-delegations: bool
   }
 )
+
+(define-map RewardPeriods
+  { period-id: uint }
+  {
+    start-block: uint,
+    end-block: uint,
+    total-rewards: uint,
+    distributed: bool
+  }
+)
+
+(define-map NodeRewards
+  {
+    node: principal,
+    period-id: uint
+  }
+  {
+    amount: uint,
+    claimed: bool
+  }
+)
+
+(define-map Proposals
+  { proposal-id: uint }
+  {
+    proposer: principal,
+    description-hash: (string-ascii 64),
+    parameter-key: (string-ascii 32),
+    proposed-value: uint,
+    start-block: uint,
+    end-block: uint,
+    votes-for: uint,
+    votes-against: uint,
+    executed: bool
+  }
+)
