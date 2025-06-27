@@ -557,3 +557,88 @@
     (ok true)
   )
 )
+
+;; Create a specialized subnet
+(define-public (create-subnet
+  (subnet-id (string-ascii 32))
+  (min-stake-requirement uint)
+  (specialized bool)
+  (topic-hash (string-ascii 64))
+)
+  (let (
+    (creator tx-sender)
+    (node-info (unwrap! (map-get? IndexingNodes { node-address: creator }) ERR_INVALID_NODE))
+  )
+    ;; Verify node is active and has enough reputation
+    (asserts! (and (get active node-info) 
+                  (>= (get reputation-score node-info) u5000))
+             ERR_INSUFFICIENT_REPUTATION)
+    
+    ;; Pay subnet creation fee
+    (try! (stx-transfer? SUBNET_CREATION_FEE creator (as-contract tx-sender)))
+    
+    ;; Create subnet
+    (map-set Subnets
+      { subnet-id: subnet-id }
+      {
+        creator: creator,
+        creation-block: stacks-block-height,
+        node-count: u1, ;; Creator is first member
+        min-stake-requirement: min-stake-requirement,
+        specialized: specialized,
+        topic-hash: topic-hash
+      }
+    )
+    
+    ;; Add creator to subnet
+    (map-set SubnetMembership
+      {
+        subnet-id: subnet-id,
+        node: creator
+      }
+      {
+        join-block: stacks-block-height,
+        stake-committed: (get total-stake node-info)
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+;; Join a subnet
+(define-public (join-subnet
+  (subnet-id (string-ascii 32))
+)
+  (let (
+    (node tx-sender)
+    (node-info (unwrap! (map-get? IndexingNodes { node-address: node }) ERR_INVALID_NODE))
+    (subnet (unwrap! (map-get? Subnets { subnet-id: subnet-id }) ERR_INVALID_QUERY))
+  )
+    ;; Verify node is active
+    (asserts! (get active node-info) ERR_UNAUTHORIZED)
+    
+    ;; Verify node meets stake requirement
+    (asserts! (>= (get total-stake node-info) (get min-stake-requirement subnet)) ERR_INSUFFICIENT_STAKE)
+    
+    ;; Add node to subnet
+    (map-set SubnetMembership
+      {
+        subnet-id: subnet-id,
+        node: node
+      }
+      {
+        join-block: stacks-block-height,
+        stake-committed: (get total-stake node-info)
+      }
+    )
+    
+    ;; Update subnet node count
+    (map-set Subnets
+      { subnet-id: subnet-id }
+      (merge subnet { node-count: (+ (get node-count subnet) u1) })
+    )
+    
+    (ok true)
+  )
+)
